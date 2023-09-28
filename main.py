@@ -9,16 +9,16 @@ population_size = 50
 mutation_probability = 0.01
 C1 = 2.0
 C2 = 2.0
-max_iter = 1000
+max_iter = 500
 inertia_weight = 1.4
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
 
 # global variables
-machines = np.array([])
+machines = np.array([], dtype=np.float64)
 jobs = np.array([], dtype=object)
 particles = np.array([None] * population_size, dtype=object)
-global_best_position = np.array([])
+global_best_position = np.array([], dtype=np.float64)
 global_best_make_span = math.inf
 dimension = 0
 
@@ -53,9 +53,9 @@ class PSOParticle:
     def __init__(self):
         self.encoded_position = None
         self.position = np.random.uniform(-dimension, dimension, dimension)
-        self.velocity = np.zeros(dimension)
+        self.velocity = np.zeros(dimension, dtype=np.float64)
         self.make_span = math.inf
-        self.local_best_position = np.zeros(dimension)
+        self.local_best_position = np.zeros(dimension, dtype=np.float64)
         self.local_best_make_span = math.inf
 
     def __str__(self):
@@ -67,9 +67,11 @@ class PSOParticle:
         second_part = C1 * random.random() * (self.local_best_position - self.position)
         third_part = C2 * random.random() * (global_best_position - self.position)
         self.velocity = first_part + second_part + third_part
+        fit_values_into_range(self.velocity, dimension*0.1, -dimension*0.1)
 
     def update_position(self):
         self.position += self.velocity
+        fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
         self.make_span = get_make_span_by_position(self.encoded_position)
 
@@ -81,7 +83,7 @@ class PSOParticle:
         operation_sequence = np.array([None] * dimension, dtype=Operation)
         job_occurrences = {}
         for index, job_index in enumerate(integer_series):
-            if job_index in job_occurrences:
+            if job_index in job_occurrences.keys():
                 job_occurrences[job_index] += 1
             else:
                 job_occurrences[job_index] = 0
@@ -91,7 +93,7 @@ class PSOParticle:
         return operation_sequence
 
     def position_integer_series(self):
-        integer_series = np.zeros(dimension)
+        integer_series = np.zeros(dimension, dtype=int)
         position_copy = self.position.copy()
         for order in range(dimension):
             smallest_value = math.inf
@@ -143,6 +145,16 @@ class PSOParticle:
             self.local_best_make_span = self.make_span
 
 
+def fit_values_into_range(values, maximum, minimum):
+    for index, value in enumerate(values):
+        if math.isnan(value):
+            values[index] = 0
+        elif value > maximum:
+            values[index] = maximum
+        elif value < minimum:
+            values[index] = minimum
+
+
 def get_make_span_by_position(position):
     machine_dictionary = dict(zip(machines, [{"elapsed_time": 0, "current_operation": None}] * len(machines)))
     for operation in position:
@@ -182,7 +194,7 @@ def update_inertia_weight(current_iteration):
 
 def iteration(current_iteration):
     print()
-    print(f"ITERATION #{current_iteration}")
+    print(f"ITERATION #{current_iteration + 1}")
     print("############################################")
 
     for particle in particles:
@@ -196,7 +208,7 @@ def iteration(current_iteration):
     for particle in particles:
         particle.update_velocity()
         particle.update_position()
-        print(particle.__str__())
+        #print(particle.__str__())
 
     print("############################################")
 

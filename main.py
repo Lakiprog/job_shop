@@ -227,7 +227,7 @@ def read_file_dataset(dataset_name):
                 f.readline()
                 f.readline()
                 line = f.readline().strip()
-                numbers = line.split(" ")
+                numbers = [number for number in line.split(" ") if number != ""]
                 num_of_jobs = int(numbers[0])
                 num_of_machines = int(numbers[1])
                 machines = np.arange(num_of_machines)
@@ -235,7 +235,7 @@ def read_file_dataset(dataset_name):
 
                 for job_index in range(num_of_jobs):
                     line = f.readline().strip()
-                    numbers = line.split(" ")
+                    numbers = [number for number in line.split(" ") if number != ""]
                     operations = np.array([], dtype=Operation)
 
                     for i in range(0, len(numbers), 2):

@@ -15,10 +15,11 @@ inertia_weight_max = 1.4
 inertia_weight_min = 0.4
 
 # global variables
-machines = np.array([], dtype=np.float64)
+machines = np.array([])
 jobs = np.array([], dtype=object)
 particles = np.array([None] * population_size, dtype=object)
 global_best_position = np.array([], dtype=np.float64)
+global_best_encoded_position = np.array([], dtype=object)
 global_best_make_span = math.inf
 dimension = 0
 
@@ -156,35 +157,50 @@ def fit_values_into_range(values, maximum, minimum):
 
 
 def get_make_span_by_position(position):
-    machine_dictionary = dict(zip(machines, [{"elapsed_time": 0, "current_operation": None}] * len(machines)))
+    machine_dictionary = {}
+    for machine in machines:
+        machine_dictionary[machine] = []
+
     for operation in position:
         machine = machine_dictionary[operation.machine_id]
-        if machine["current_operation"] is None:
-            machine["elapsed_time"] = operation.duration
-        else:
-            added = False
-            for machine_dict in machine_dictionary.values():
-                if machine_dict["current_operation"].job_id == operation.job_id:
-                    machine["elapsed_time"] = machine_dict["elapsed_time"] + operation.duration
+        added = False
+        for machine_dict in machine_dictionary.values():
+            for machine_schedule in machine_dict:
+                if (machine_schedule["operation"].job_id == operation.job_id
+                        and machine_schedule["operation"].operation_id == (operation.operation_id - 1)):
+
+                    if len(machine) == 0 or machine[-1]["elapsed_time"] < machine_schedule["elapsed_time"]:
+                        machine.append({"operation": operation,
+                                        "elapsed_time": machine_schedule["elapsed_time"] + operation.duration})
+                    else:
+                        machine.append({"operation": operation,
+                                        "elapsed_time": machine[-1]["elapsed_time"] + operation.duration})
                     added = True
-            if not added:
-                machine["elapsed_time"] += operation.duration
-        machine["current_operation"] = operation
+                    break
+        if not added:
+            if len(machine) == 0:
+                machine.append({"operation": operation,
+                                "elapsed_time": operation.duration})
+            else:
+                machine.append({"operation": operation,
+                                "elapsed_time": machine[-1]["elapsed_time"] + operation.duration})
 
     longest_machine_time = 0
     for machine_dict in machine_dictionary.values():
-        if longest_machine_time < machine_dict["elapsed_time"]:
-            longest_machine_time = machine_dict["elapsed_time"]
+        if longest_machine_time < machine_dict[-1]["elapsed_time"]:
+            longest_machine_time = machine_dict[-1]["elapsed_time"]
     return longest_machine_time
 
 
 def update_global_position():
+    global global_best_make_span
+    global global_best_position
+    global global_best_encoded_position
     for particle in particles:
-        global global_best_make_span
-        global global_best_position
         if particle.make_span < global_best_make_span:
             global_best_make_span = particle.make_span
             global_best_position = particle.position
+            global_best_encoded_position = particle.encoded_position
 
 
 def update_inertia_weight(current_iteration):
@@ -208,7 +224,6 @@ def iteration(current_iteration):
     for particle in particles:
         particle.update_velocity()
         particle.update_position()
-        #print(particle.__str__())
 
     print("############################################")
 
@@ -269,5 +284,7 @@ if __name__ == '__main__':
     for it in range(max_iter):
         iteration(it)
 
+    for op in global_best_encoded_position:
+        print(f"JOB: {op.job_id + 1}" + op.__str__())
     print(f"Best position: {global_best_position}")
     print(f"Best make span: {global_best_make_span}")

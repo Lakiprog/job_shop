@@ -1,6 +1,8 @@
 import math
 import random
 import numpy as np
+import docplex.cp.utils_visu as visu
+from pylab import rcParams
 
 FILE_PATH = "./data.txt"
 
@@ -9,7 +11,7 @@ population_size = 50
 mutation_probability = 0.01
 C1 = 2.0
 C2 = 2.0
-max_iter = 500
+max_iter = 100
 inertia_weight = 1.4
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
@@ -53,7 +55,7 @@ class PSOParticle:
 
     def __init__(self):
         self.encoded_position = None
-        self.position = np.random.uniform(-dimension, dimension, dimension)
+        self.position = np.random.uniform(-1, 1, dimension)
         self.velocity = np.zeros(dimension, dtype=np.float64)
         self.make_span = math.inf
         self.local_best_position = np.zeros(dimension, dtype=np.float64)
@@ -72,7 +74,14 @@ class PSOParticle:
 
     def update_position(self):
         self.position += self.velocity
-        fit_values_into_range(self.position, dimension, -dimension)
+        for pos in self.position:
+            if math.isnan(pos):
+                pos = 0
+        #     if pos == math.inf:
+        #         pos = dimension * 10
+        #     if pos == -math.inf:
+        #         pos = -dimension*10
+        #fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
         self.make_span = get_make_span_by_position(self.encoded_position)
 
@@ -268,6 +277,56 @@ def read_file_dataset(dataset_name):
                 break
 
 
+def display_gantt():
+    machine_dictionary = {}
+    for machine in machines:
+        machine_dictionary[machine] = []
+
+    for operation in global_best_encoded_position:
+        machine = machine_dictionary[operation.machine_id]
+        added = False
+        for machine_dict in machine_dictionary.values():
+            for machine_schedule in machine_dict:
+                if (machine_schedule["operation"].job_id == operation.job_id
+                        and machine_schedule["operation"].operation_id == (operation.operation_id - 1)):
+
+                    if len(machine) == 0 or machine[-1]["end"] < machine_schedule["end"]:
+                        machine.append({"operation": operation,
+                                        "start": machine_schedule["end"],
+                                        "end": machine_schedule["end"] + operation.duration})
+                    else:
+                        machine.append({"operation": operation,
+                                        "start": machine[-1]["end"],
+                                        "end": machine[-1]["end"] + operation.duration})
+                    added = True
+                    break
+        if not added:
+            if len(machine) == 0:
+                machine.append({"operation": operation,
+                                "start": 0,
+                                "end": operation.duration})
+            else:
+                machine.append({"operation": operation,
+                                "start": machine[-1]["end"],
+                                "end": machine[-1]["end"] + operation.duration})
+
+    longest_machine_time = 0
+    for machine_dict in machine_dictionary.values():
+        if longest_machine_time < machine_dict[-1]["end"]:
+            longest_machine_time = machine_dict[-1]["end"]
+
+    rcParams['figure.figsize'] = 20, 5
+    rcParams['font.size'] = 6
+    visu.timeline('Job Shop Solution', 0, longest_machine_time)
+    for index in range(len(machine_dictionary)):
+        visu.sequence(name=str(index + 1))
+        for machine_schedule in machine_dictionary[index]:
+            operation = machine_schedule["operation"]
+            visu.interval(machine_schedule["start"], machine_schedule["end"], "salmon",
+                          f"O-{operation.job_id + 1}-{operation.operation_id + 1}")
+    visu.show()
+
+
 if __name__ == '__main__':
     dataset = input("Please type the name of the dataset of your desired JSS problem:")
     read_file_dataset(dataset)
@@ -284,7 +343,5 @@ if __name__ == '__main__':
     for it in range(max_iter):
         iteration(it)
 
-    for op in global_best_encoded_position:
-        print(f"JOB: {op.job_id + 1}" + op.__str__())
-    print(f"Best position: {global_best_position}")
     print(f"Best make span: {global_best_make_span}")
+    display_gantt()

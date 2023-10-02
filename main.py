@@ -6,13 +6,26 @@ from pylab import rcParams
 
 FILE_PATH = "./data.txt"
 
+optimal_values = {
+    "ft06": 55,
+    "ft10": 930,
+    "ft20": 1165,
+    "la01": 666,
+    "la06": 926,
+    "la11": 1222,
+    "la21": 1046,
+    "la26": 1218,
+    "la31": 1784,
+    "la36": 1268,
+}
+
 # parameters
-population_size = 50
+population_size = 200
 mutation_probability = 0.01
-C1 = 2.0
-C2 = 2.0
-max_iter = 100
-inertia_weight = 1.4
+C1 = 2.5
+C2 = 0.5
+max_iter = 1000
+inertia_weight = 2
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
 
@@ -24,6 +37,7 @@ global_best_position = np.array([], dtype=np.float64)
 global_best_encoded_position = np.array([], dtype=object)
 global_best_make_span = math.inf
 dimension = 0
+optimal_value = 0
 
 
 class Operation:
@@ -74,14 +88,6 @@ class PSOParticle:
 
     def update_position(self):
         self.position += self.velocity
-        for pos in self.position:
-            if math.isnan(pos):
-                pos = 0
-        #     if pos == math.inf:
-        #         pos = dimension * 10
-        #     if pos == -math.inf:
-        #         pos = -dimension*10
-        #fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
         self.make_span = get_make_span_by_position(self.encoded_position)
 
@@ -142,11 +148,12 @@ class PSOParticle:
 
             mutated_make_span = get_make_span_by_position(self.encoded_position)
 
-            if self.make_span >= mutated_make_span:
-                self.make_span = mutated_make_span
-            else:
-                self.position = old_position
-                self.encoded_position = old_encoded_position
+            self.make_span = mutated_make_span
+            # if self.make_span >= mutated_make_span:
+            #     self.make_span = mutated_make_span
+            # else:
+            #     self.position = old_position
+            #     self.encoded_position = old_encoded_position
 
     # update the local best position
     def update_local_best(self):
@@ -212,29 +219,34 @@ def update_global_position():
             global_best_encoded_position = particle.encoded_position
 
 
-def update_inertia_weight(current_iteration):
+def update_iter_sensitive_params(current_iteration):
     global inertia_weight
-    inertia_weight = inertia_weight_max - (current_iteration * (inertia_weight_max - inertia_weight_min) / max_iter)
+    global C1
+    global C2
+    inertia_weight = (inertia_weight_max -
+                      (current_iteration * (inertia_weight_max - inertia_weight_min) / max_iter))
+    C1 = 2.5 - (2 * current_iteration / max_iter)
+    C2 = 0.5 + (2 * current_iteration / max_iter)
 
 
 def iteration(current_iteration):
-    print()
-    print(f"ITERATION #{current_iteration + 1}")
-    print("############################################")
-
     for particle in particles:
         particle.mutation()
         particle.update_local_best()
 
     update_global_position()
-    print(f"Global best make span: {global_best_make_span}")
-    update_inertia_weight(current_iteration)
+    update_iter_sensitive_params(current_iteration + 1)
+
+    if (current_iteration + 1) % 50 == 0:
+        print()
+        print(f"ITERATION #{current_iteration + 1}")
+        print("############################################")
+        print(f"Global best make span: {global_best_make_span}")
+        print("############################################")
 
     for particle in particles:
         particle.update_velocity()
         particle.update_position()
-
-    print("############################################")
 
 
 def read_file_dataset(dataset_name):
@@ -331,6 +343,9 @@ if __name__ == '__main__':
     dataset = input("Please type the name of the dataset of your desired JSS problem:")
     read_file_dataset(dataset)
 
+    if optimal_values.keys().__contains__(dataset):
+        optimal_value = optimal_values[dataset]
+
     print()
     print("Job Shop Scheduling problem definition")
     print("############################################")
@@ -342,6 +357,11 @@ if __name__ == '__main__':
 
     for it in range(max_iter):
         iteration(it)
+        if global_best_make_span == optimal_value:
+            break
 
+    print()
+    print("############################################")
     print(f"Best make span: {global_best_make_span}")
+    print("############################################")
     display_gantt()

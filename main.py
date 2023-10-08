@@ -20,7 +20,7 @@ optimal_values = {
 }
 
 # parameters
-population_size = 200
+population_size = 100
 mutation_probability = 0.01
 C1 = 2.5
 C2 = 0.5
@@ -28,6 +28,8 @@ max_iter = 1000
 inertia_weight = 2
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
+remap_iterations = 10
+bifurcation = 4
 
 # global variables
 machines = np.array([])
@@ -68,8 +70,8 @@ class Job:
 class PSOParticle:
 
     def __init__(self):
-        self.encoded_position = None
-        self.position = np.random.uniform(-1, 1, dimension)
+        self.encoded_position = np.array([], dtype=Operation)
+        self.position = np.random.uniform(0, 1, dimension)
         self.velocity = np.zeros(dimension, dtype=np.float64)
         self.make_span = math.inf
         self.local_best_position = np.zeros(dimension, dtype=np.float64)
@@ -78,6 +80,10 @@ class PSOParticle:
     def __str__(self):
         return (f"POSITION={self.position} MAKE SPAN={self.make_span} " +
                 f"LOCAL BEST POSITION={self.local_best_position} LOCAL BEST MAKE SPAN={self.local_best_make_span}\n")
+
+    def chaotically_remap_particle(self):
+        for index, pos in enumerate(self.position):
+            self.position[index] = bifurcation * pos * (1 - pos)
 
     def update_velocity(self):
         first_part = self.velocity * inertia_weight
@@ -88,6 +94,7 @@ class PSOParticle:
 
     def update_position(self):
         self.position += self.velocity
+        fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
         self.make_span = get_make_span_by_position(self.encoded_position)
 
@@ -155,7 +162,7 @@ class PSOParticle:
             #     self.position = old_position
             #     self.encoded_position = old_encoded_position
 
-    # update the local best position
+    
     def update_local_best(self):
         if self.local_best_make_span > self.make_span:
             self.local_best_position = self.position
@@ -355,6 +362,14 @@ if __name__ == '__main__':
         print(job.__str__())
     print("############################################")
 
+    for i in range(remap_iterations):
+        for p in particles:
+            p.chaotically_remap_particle()
+
+    print()
+    print("Initialization complete")
+    print()
+
     for it in range(max_iter):
         iteration(it)
         if global_best_make_span == optimal_value:
@@ -364,4 +379,5 @@ if __name__ == '__main__':
     print("############################################")
     print(f"Best make span: {global_best_make_span}")
     print("############################################")
+
     display_gantt()

@@ -24,12 +24,15 @@ population_size = 100
 mutation_probability = 0.01
 C1 = 2.5
 C2 = 0.5
+C3 = 1.5
+C4 = 1.5
 max_iter = 1000
 inertia_weight = 2
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
 remap_iterations = 10
 bifurcation = 4
+neighbours = 9
 
 # global variables
 machines = np.array([])
@@ -74,12 +77,16 @@ class PSOParticle:
         self.position = np.random.uniform(0, 1, dimension)
         self.velocity = np.zeros(dimension, dtype=np.float64)
         self.make_span = math.inf
+        self.personal_best_position = np.zeros(dimension, dtype=np.float64)
+        self.personal_best_make_span = math.inf
         self.local_best_position = np.zeros(dimension, dtype=np.float64)
         self.local_best_make_span = math.inf
+        self.near_neighbour_best_position = np.zeros(dimension, dtype=np.float64)
+        self.near_neighbour_make_span = math.inf
 
     def __str__(self):
         return (f"POSITION={self.position} MAKE SPAN={self.make_span} " +
-                f"LOCAL BEST POSITION={self.local_best_position} LOCAL BEST MAKE SPAN={self.local_best_make_span}\n")
+                f"LOCAL BEST POSITION={self.personal_best_position} LOCAL BEST MAKE SPAN={self.personal_best_make_span}\n")
 
     def chaotically_remap_particle(self):
         for index, pos in enumerate(self.position):
@@ -87,14 +94,16 @@ class PSOParticle:
 
     def update_velocity(self):
         first_part = self.velocity * inertia_weight
-        second_part = C1 * random.random() * (self.local_best_position - self.position)
-        third_part = C2 * random.random() * (global_best_position - self.position)
-        self.velocity = first_part + second_part + third_part
+        personal_part = C1 * random.random() * (self.personal_best_position - self.position)
+        global_part = C2 * random.random() * (global_best_position - self.position)
+        local_part = C3 * random.random() * (self.local_best_position - self.position)
+        nearest_neighbor_part = C4 * random.random() * (self.near_neighbour_best_position - self.position)
+        self.velocity = first_part + personal_part + global_part + local_part + nearest_neighbor_part
         fit_values_into_range(self.velocity, dimension * 0.1, -dimension * 0.1)
 
     def update_position(self):
         self.position += self.velocity
-        fit_values_into_range(self.position, dimension, -dimension)
+        # fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
         self.make_span = get_make_span_by_position(self.encoded_position)
 
@@ -162,10 +171,43 @@ class PSOParticle:
             #     self.position = old_position
             #     self.encoded_position = old_encoded_position
 
-    def update_local_best(self):
-        if self.local_best_make_span > self.make_span:
-            self.local_best_position = self.position
-            self.local_best_make_span = self.make_span
+    def update_personal_best(self):
+        if self.personal_best_make_span > self.make_span:
+            self.personal_best_position = self.position
+            self.personal_best_make_span = self.make_span
+
+    def update_local_best(self, index):
+        local_particles = np.array([], dtype=PSOParticle)
+
+        for i in range((neighbours - 1)//2):
+            local_particles = np.append(local_particles, particles[index - i - 1])
+
+        local_particles = np.append(local_particles, [self])
+
+        for i in range((neighbours - 1)//2):
+            overflow = index + i + 1 - population_size
+            if overflow >= 0:
+                local_particles = np.append(local_particles, particles[overflow])
+            else:
+                local_particles = np.append(local_particles, particles[index + i + 1])
+
+        for particle in local_particles:
+            if self.local_best_make_span > particle.personal_best_make_span:
+                self.local_best_position = particle.personal_best_position
+                self.local_best_make_span = particle.personal_best_make_span
+
+    def update_nearest_neighbor_best(self, index):
+        for pos_index, d in enumerate(self.near_neighbour_best_position.copy()):
+            best = 0
+            best_fdr = -math.inf
+            for i, particle in enumerate(particles):
+                if i != index:
+                    fdr = ((self.make_span - particle.personal_best_make_span) /
+                           abs(particle.personal_best_position[pos_index] - self.position[pos_index] + 1))
+                    if fdr > best_fdr:
+                        best_fdr = fdr
+                        best = particle.personal_best_position[pos_index]
+            self.near_neighbour_best_position[pos_index] = best
 
 
 def fit_values_into_range(values, maximum, minimum):
@@ -236,9 +278,11 @@ def update_iter_sensitive_params(current_iteration):
 
 
 def iteration(current_iteration):
-    for particle in particles:
+    for index, particle in enumerate(particles):
         particle.mutation()
-        particle.update_local_best()
+        particle.update_personal_best()
+        particle.update_local_best(index)
+        particle.update_nearest_neighbor_best(index)
 
     update_global_position()
     update_iter_sensitive_params(current_iteration + 1)

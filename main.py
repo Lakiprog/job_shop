@@ -90,7 +90,7 @@ class PSOParticle:
         second_part = C1 * random.random() * (self.local_best_position - self.position)
         third_part = C2 * random.random() * (global_best_position - self.position)
         self.velocity = first_part + second_part + third_part
-        fit_values_into_range(self.velocity, dimension*0.1, -dimension*0.1)
+        fit_values_into_range(self.velocity, dimension * 0.1, -dimension * 0.1)
 
     def update_position(self):
         self.position += self.velocity
@@ -162,7 +162,6 @@ class PSOParticle:
             #     self.position = old_position
             #     self.encoded_position = old_encoded_position
 
-    
     def update_local_best(self):
         if self.local_best_make_span > self.make_span:
             self.local_best_position = self.position

@@ -20,19 +20,22 @@ optimal_values = {
 }
 
 # parameters
-population_size = 100
+population_size = 50
 mutation_probability = 0.01
 C1 = 2.5
 C2 = 0.5
 C3 = 1.5
 C4 = 1.5
-max_iter = 1000
-inertia_weight = 2
+max_iter = 2000
+inertia_weight = 1.4
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
-remap_iterations = 10
+remap_iterations = 100
 bifurcation = 4
 neighbours = 9
+q_c = 0.2
+q_u = 0.7
+max_idle_time = 0.4
 
 # global variables
 machines = np.array([])
@@ -103,25 +106,102 @@ class PSOParticle:
 
     def update_position(self):
         self.position += self.velocity
-        # fit_values_into_range(self.position, dimension, -dimension)
         self.rk_encoding()
-        self.make_span = get_make_span_by_position(self.encoded_position)
+
+    def crossover(self):
+        if random.random() > q_u:
+            self.position = global_best_position
+            self.encoded_position = global_best_encoded_position
+            self.make_span = global_best_make_span
 
     def rk_encoding(self):
         integer_series = self.position_integer_series()
         for index, value in enumerate(integer_series.copy()):
             integer_series[index] = value % len(jobs)
 
-        operation_sequence = np.array([None] * dimension, dtype=Operation)
-        job_occurrences = {}
-        for index, job_index in enumerate(integer_series):
-            if job_index in job_occurrences.keys():
-                job_occurrences[job_index] += 1
+        operation_sequence = np.array([], dtype=Operation)
+        machine_schedules = dict((machine_id, []) for machine_id in machines)
+        scheduleable_operations = dict([(j.job_id, {"operation": j.operations[0],
+                                                    "fi": 0,
+                                                    "delta": 0})
+                                        for j in jobs])
+
+        for i in range(dimension):
+            best_fi = math.inf
+            best_delta = math.inf
+            for job_id in scheduleable_operations:
+                operation = scheduleable_operations[job_id]["operation"]
+                machine = machine_schedules[operation.machine_id]
+                delta = 0
+                added = False
+                for machine_dict in machine_schedules.values():
+                    for machine_schedule in machine_dict:
+                        if (machine_schedule["operation"].job_id == operation.job_id and
+                                machine_schedule["operation"].operation_id == (operation.operation_id - 1)):
+
+                            if len(machine) == 0 or machine[-1]["elapsed_time"] < machine_schedule["elapsed_time"]:
+                                delta = machine_schedule["elapsed_time"]
+                            else:
+                                delta = machine[-1]["elapsed_time"]
+
+                            added = True
+                            break
+
+                if not added:
+                    if len(machine) == 0:
+                        delta = 0
+                    else:
+                        delta = machine[-1]["elapsed_time"]
+
+                fi = delta + operation.duration
+                if fi < best_fi:
+                    best_fi = fi
+
+                if delta < best_delta:
+                    best_delta = delta
+
+                scheduleable_operations[job_id]["delta"] = delta
+                scheduleable_operations[job_id]["fi"] = fi
+
+            requirement = best_delta + max_idle_time * (best_fi - best_delta)
+            possible_schedules = []
+            for scheduleable_operation in scheduleable_operations.values():
+                if scheduleable_operation["delta"] <= requirement:
+                    possible_schedules.append(scheduleable_operation)
+
+            if len(possible_schedules) > 1:
+                job_occurrences = dict([(j.job_id, 0) for j in jobs])
+                for job_index in integer_series:
+                    found = False
+                    for possible_schedule in possible_schedules:
+                        operation = possible_schedule["operation"]
+                        if (operation.job_id == job_index and
+                                job_occurrences[operation.job_id] == operation.operation_id):
+                            operation_sequence = np.append(operation_sequence, operation)
+                            machine_schedules[operation.machine_id].append({"operation": operation,
+                                                                            "elapsed_time": possible_schedule["fi"]})
+                            found = True
+                            break
+
+                    if found:
+                        break
+                    job_occurrences[job_index] += 1
             else:
-                job_occurrences[job_index] = 0
-            operation_sequence[index] = jobs[int(job_index)].operations[int(job_occurrences[job_index])]
+                operation = possible_schedules[0]["operation"]
+                operation_sequence = np.append(operation_sequence, operation)
+                machine_schedules[operation.machine_id].append({"operation": operation,
+                                                                "elapsed_time": possible_schedules[0]["fi"]})
+
+            operation = operation_sequence[-1]
+            if operation.operation_id != len(jobs[operation.job_id].operations) - 1:
+                scheduleable_operations[operation.job_id] = {
+                    "operation": jobs[operation.job_id].operations[operation.operation_id + 1]
+                }
+            else:
+                scheduleable_operations.pop(operation.job_id)
 
         self.encoded_position = operation_sequence
+        self.make_span = max(machine_schedule[-1]["elapsed_time"] for machine_schedule in machine_schedules.values())
         return operation_sequence
 
     def position_integer_series(self):
@@ -154,22 +234,10 @@ class PSOParticle:
 
     def mutation(self):
         if random.random() <= mutation_probability:
-            old_position = self.position
-            old_encoded_position = self.encoded_position
-
             if random.random() < 0.5:
                 self.swapping_operation()
             else:
                 self.insertion_operation()
-
-            mutated_make_span = get_make_span_by_position(self.encoded_position)
-
-            self.make_span = mutated_make_span
-            # if self.make_span >= mutated_make_span:
-            #     self.make_span = mutated_make_span
-            # else:
-            #     self.position = old_position
-            #     self.encoded_position = old_encoded_position
 
     def update_personal_best(self):
         if self.personal_best_make_span > self.make_span:
@@ -179,12 +247,12 @@ class PSOParticle:
     def update_local_best(self, index):
         local_particles = np.array([], dtype=PSOParticle)
 
-        for i in range((neighbours - 1)//2):
+        for i in range((neighbours - 1) // 2):
             local_particles = np.append(local_particles, particles[index - i - 1])
 
         local_particles = np.append(local_particles, [self])
 
-        for i in range((neighbours - 1)//2):
+        for i in range((neighbours - 1) // 2):
             overflow = index + i + 1 - population_size
             if overflow >= 0:
                 local_particles = np.append(local_particles, particles[overflow])
@@ -218,42 +286,6 @@ def fit_values_into_range(values, maximum, minimum):
             values[index] = maximum
         elif value < minimum:
             values[index] = minimum
-
-
-def get_make_span_by_position(position):
-    machine_dictionary = {}
-    for machine in machines:
-        machine_dictionary[machine] = []
-
-    for operation in position:
-        machine = machine_dictionary[operation.machine_id]
-        added = False
-        for machine_dict in machine_dictionary.values():
-            for machine_schedule in machine_dict:
-                if (machine_schedule["operation"].job_id == operation.job_id
-                        and machine_schedule["operation"].operation_id == (operation.operation_id - 1)):
-
-                    if len(machine) == 0 or machine[-1]["elapsed_time"] < machine_schedule["elapsed_time"]:
-                        machine.append({"operation": operation,
-                                        "elapsed_time": machine_schedule["elapsed_time"] + operation.duration})
-                    else:
-                        machine.append({"operation": operation,
-                                        "elapsed_time": machine[-1]["elapsed_time"] + operation.duration})
-                    added = True
-                    break
-        if not added:
-            if len(machine) == 0:
-                machine.append({"operation": operation,
-                                "elapsed_time": operation.duration})
-            else:
-                machine.append({"operation": operation,
-                                "elapsed_time": machine[-1]["elapsed_time"] + operation.duration})
-
-    longest_machine_time = 0
-    for machine_dict in machine_dictionary.values():
-        if longest_machine_time < machine_dict[-1]["elapsed_time"]:
-            longest_machine_time = machine_dict[-1]["elapsed_time"]
-    return longest_machine_time
 
 
 def update_global_position():
@@ -295,8 +327,11 @@ def iteration(current_iteration):
         print("############################################")
 
     for particle in particles:
-        particle.update_velocity()
-        particle.update_position()
+        if random.random() > q_c:
+            particle.update_velocity()
+            particle.update_position()
+        else:
+            particle.crossover()
 
 
 def read_file_dataset(dataset_name):
@@ -405,9 +440,12 @@ if __name__ == '__main__':
         print(job.__str__())
     print("############################################")
 
-    for i in range(remap_iterations):
+    for x in range(remap_iterations):
         for p in particles:
             p.chaotically_remap_particle()
+
+    for p in particles:
+        p.rk_encoding()
 
     print()
     print("Initialization complete")

@@ -11,22 +11,51 @@ optimal_values = {
     "ft10": 930,
     "ft20": 1165,
     "la01": 666,
+    "la02": 655,
+    "la03": 597,
+    "la04": 590,
+    "la05": 593,
     "la06": 926,
+    "la07": 890,
+    "la08": 863,
+    "la09": 951,
+    "la10": 958,
     "la11": 1222,
+    "la12": 1039,
+    "la13": 1150,
+    "la14": 1292,
+    "la15": 1207,
+    "la16": 945,
+    "la17": 784,
+    "la18": 848,
+    "la19": 842,
+    "la20": 902,
     "la21": 1046,
+    "la22": 927,
+    "la23": 1032,
+    "la24": 935,
+    "la25": 977,
     "la26": 1218,
+    "la27": 1235,
+    "la28": 1216,
+    "la29": 1152,
+    "la30": 1355,
     "la31": 1784,
+    "la32": 1850,
+    "la33": 1719,
+    "la34": 1721,
+    "la35": 1888,
     "la36": 1268,
 }
 
 # parameters
 population_size = 50
-mutation_probability = 0.01
+mutation_probability = 0.05
 C1 = 2.5
 C2 = 0.5
 C3 = 1.5
 C4 = 1.5
-max_iter = 2000
+max_iter = 1000
 inertia_weight = 1.4
 inertia_weight_max = 1.4
 inertia_weight_min = 0.4
@@ -87,10 +116,6 @@ class PSOParticle:
         self.near_neighbour_best_position = np.zeros(dimension, dtype=np.float64)
         self.near_neighbour_make_span = math.inf
 
-    def __str__(self):
-        return (f"POSITION={self.position} MAKE SPAN={self.make_span} " +
-                f"LOCAL BEST POSITION={self.personal_best_position} LOCAL BEST MAKE SPAN={self.personal_best_make_span}\n")
-
     def chaotically_remap_particle(self):
         for index, pos in enumerate(self.position):
             self.position[index] = bifurcation * pos * (1 - pos)
@@ -116,8 +141,6 @@ class PSOParticle:
 
     def rk_encoding(self):
         integer_series = self.position_integer_series()
-        for index, value in enumerate(integer_series.copy()):
-            integer_series[index] = value % len(jobs)
 
         operation_sequence = np.array([], dtype=Operation)
         machine_schedules = dict((machine_id, []) for machine_id in machines)
@@ -202,11 +225,12 @@ class PSOParticle:
 
         self.encoded_position = operation_sequence
         self.make_span = max(machine_schedule[-1]["elapsed_time"] for machine_schedule in machine_schedules.values())
-        return operation_sequence
 
     def position_integer_series(self):
         integer_series = np.zeros(dimension, dtype=int)
         position_copy = self.position.copy()
+        job_num = len(jobs)
+        # machine_num = len(machines)
         for order in range(dimension):
             smallest_value = math.inf
             smallest_value_index = 0
@@ -215,7 +239,8 @@ class PSOParticle:
                     smallest_value = value
                     smallest_value_index = index
             position_copy[smallest_value_index] = math.inf
-            integer_series[smallest_value_index] = order + 1
+            integer_series[smallest_value_index] = (order + 1) % job_num
+            # integer_series[smallest_value_index] = order // machine_num
         return integer_series
 
     def swapping_operation(self):

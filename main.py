@@ -140,14 +140,10 @@ class PSOParticle:
             self.make_span = global_best_make_span
 
     def rk_encoding(self):
-        integer_series = self.position_integer_series()
-
+        operation_priorities = self.operation_priorities()
         operation_sequence = np.array([], dtype=Operation)
         machine_schedules = dict((machine_id, []) for machine_id in machines)
-        scheduleable_operations = dict([(j.job_id, {"operation": j.operations[0],
-                                                    "fi": 0,
-                                                    "delta": 0})
-                                        for j in jobs])
+        scheduleable_operations = dict([(j.job_id, {"operation": j.operations[0], "fi": 0, "delta": 0}) for j in jobs])
 
         for i in range(dimension):
             best_fi = math.inf
@@ -157,8 +153,9 @@ class PSOParticle:
                 machine = machine_schedules[operation.machine_id]
                 delta = 0
                 added = False
-                for machine_dict in machine_schedules.values():
-                    for machine_schedule in machine_dict:
+                if operation.operation_id > 0:
+                    successor_machine = jobs[operation.job_id].operations[operation.operation_id - 1].machine_id
+                    for machine_schedule in machine_schedules[successor_machine]:
                         if (machine_schedule["operation"].job_id == operation.job_id and
                                 machine_schedule["operation"].operation_id == (operation.operation_id - 1)):
 
@@ -187,35 +184,29 @@ class PSOParticle:
                 scheduleable_operations[job_id]["fi"] = fi
 
             requirement = best_delta + max_idle_time * (best_fi - best_delta)
-            possible_schedules = []
-            for scheduleable_operation in scheduleable_operations.values():
-                if scheduleable_operation["delta"] <= requirement:
-                    possible_schedules.append(scheduleable_operation)
+            possible_schedules = [scheduleable_operation for scheduleable_operation in scheduleable_operations.values()
+                                  if scheduleable_operation["delta"] <= requirement]
 
+            operation = None
             if len(possible_schedules) > 1:
-                job_occurrences = dict([(j.job_id, 0) for j in jobs])
-                for job_index in integer_series:
-                    found = False
-                    for possible_schedule in possible_schedules:
-                        operation = possible_schedule["operation"]
-                        if (operation.job_id == job_index and
-                                job_occurrences[operation.job_id] == operation.operation_id):
-                            operation_sequence = np.append(operation_sequence, operation)
-                            machine_schedules[operation.machine_id].append({"operation": operation,
-                                                                            "elapsed_time": possible_schedule["fi"]})
-                            found = True
-                            break
+                smallest_index = math.inf
+                smallest_fi = 0
+                for possible_schedule in possible_schedules:
+                    op = possible_schedule['operation']
+                    operation_priority = operation_priorities[op.job_id][op.operation_id]
+                    if operation_priority < smallest_index:
+                        smallest_index = operation_priority
+                        smallest_fi = possible_schedule["fi"]
+                        operation = op
 
-                    if found:
-                        break
-                    job_occurrences[job_index] += 1
+                operation_sequence = np.append(operation_sequence, operation)
+                machine_schedules[operation.machine_id].append({"operation": operation, "elapsed_time": smallest_fi})
             else:
                 operation = possible_schedules[0]["operation"]
                 operation_sequence = np.append(operation_sequence, operation)
                 machine_schedules[operation.machine_id].append({"operation": operation,
                                                                 "elapsed_time": possible_schedules[0]["fi"]})
 
-            operation = operation_sequence[-1]
             if operation.operation_id != len(jobs[operation.job_id].operations) - 1:
                 scheduleable_operations[operation.job_id] = {
                     "operation": jobs[operation.job_id].operations[operation.operation_id + 1]
@@ -226,11 +217,10 @@ class PSOParticle:
         self.encoded_position = operation_sequence
         self.make_span = max(machine_schedule[-1]["elapsed_time"] for machine_schedule in machine_schedules.values())
 
-    def position_integer_series(self):
-        integer_series = np.zeros(dimension, dtype=int)
+    def operation_priorities(self):
+        operation_priorities = dict([(j.job_id, []) for j in jobs])
         position_copy = self.position.copy()
         job_num = len(jobs)
-        # machine_num = len(machines)
         for order in range(dimension):
             smallest_value = math.inf
             smallest_value_index = 0
@@ -239,9 +229,11 @@ class PSOParticle:
                     smallest_value = value
                     smallest_value_index = index
             position_copy[smallest_value_index] = math.inf
-            integer_series[smallest_value_index] = (order + 1) % job_num
-            # integer_series[smallest_value_index] = order // machine_num
-        return integer_series
+            operation_priorities[(order + 1) % job_num].append(smallest_value_index)
+
+        for operation_list in operation_priorities.values():
+            operation_list.sort()
+        return operation_priorities
 
     def swapping_operation(self):
         indexes = random.sample(range(dimension), 2)

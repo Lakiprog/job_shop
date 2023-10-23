@@ -442,11 +442,14 @@ def display_gantt():
 
 
 if __name__ == '__main__':
-    dataset = input("Please type the name of the dataset of your desired JSS problem:")
-    read_file_dataset(dataset)
-
-    if optimal_values.keys().__contains__(dataset):
-        optimal_value = optimal_values[dataset]
+    while len(jobs) == 0:
+        dataset = input("Please type the name of the dataset of your desired JSS problem:")
+        read_file_dataset(dataset)
+        if len(jobs) == 0:
+            print()
+            print("A Dataset with this name doesn't exist")
+        elif optimal_values.keys().__contains__(dataset):
+            optimal_value = optimal_values[dataset]
 
     print()
     print("Job Shop Scheduling problem definition")

@@ -334,11 +334,11 @@ def iteration(current_iteration):
         particle.update_nearest_neighbor_best(index)
 
     update_global_position()
-    update_iter_sensitive_params(current_iteration + 1)
+    update_iter_sensitive_params(current_iteration)
 
-    if (current_iteration + 1) % 50 == 0:
+    if current_iteration % 50 == 0:
         print()
-        print(f"ITERATION #{current_iteration + 1}")
+        print(f"ITERATION #{current_iteration}")
         print("############################################")
         print(f"Global best make span: {global_best_make_span}")
         print("############################################")
@@ -468,7 +468,7 @@ if __name__ == '__main__':
     print("Initialization complete")
     print()
 
-    for it in range(max_iter):
+    for it in range(1, max_iter + 1):
         iteration(it)
         if global_best_make_span == optimal_value:
             break

@@ -122,10 +122,10 @@ class PSOParticle:
 
     def update_velocity(self):
         first_part = self.velocity * inertia_weight
-        personal_part = C1 * random.random() * (self.personal_best_position - self.position)
-        global_part = C2 * random.random() * (global_best_position - self.position)
-        local_part = C3 * random.random() * (self.local_best_position - self.position)
-        nearest_neighbor_part = C4 * random.random() * (self.near_neighbour_best_position - self.position)
+        personal_part = (C1 * random.random()) * (self.personal_best_position - self.position)
+        global_part = (C2 * random.random()) * (global_best_position - self.position)
+        local_part = (C3 * random.random()) * (self.local_best_position - self.position)
+        nearest_neighbor_part = (C4 * random.random()) * (self.near_neighbour_best_position - self.position)
         self.velocity = first_part + personal_part + global_part + local_part + nearest_neighbor_part
         fit_values_into_range(self.velocity, dimension * 0.1, -dimension * 0.1)
 
@@ -282,7 +282,7 @@ class PSOParticle:
                 self.local_best_make_span = particle.personal_best_make_span
 
     def update_nearest_neighbor_best(self, index):
-        for pos_index, d in enumerate(self.near_neighbour_best_position.copy()):
+        for pos_index in range(dimension):
             best = 0
             best_fdr = -math.inf
             for i, particle in enumerate(particles):
@@ -305,7 +305,7 @@ def fit_values_into_range(values, maximum, minimum):
             values[index] = minimum
 
 
-def update_global_position():
+def update_global_best_position():
     global global_best_make_span
     global global_best_position
     global global_best_encoded_position
@@ -333,7 +333,7 @@ def iteration(current_iteration):
         particle.update_local_best(index)
         particle.update_nearest_neighbor_best(index)
 
-    update_global_position()
+    update_global_best_position()
     update_iter_sensitive_params(current_iteration)
 
     if current_iteration % 50 == 0:
